@@ -1,5 +1,5 @@
 #property link          "https://www.earnforex.com/metatrader-indicators/currency-strength-lines/"
-#property version       "1.18"
+#property version       "1.19"
 #property strict
 #property copyright     "EarnForex.com - 2019-2023"
 #property description   "This indicator analyses the strength of a currency and its trend"
@@ -124,7 +124,7 @@ input bool DrawPanel = true;              // Draw Panel
 
 string Font = "Consolas";
 
-//--- indicator buffers
+// Indicator buffers
 double EUR[];
 double GBP[];
 double USD[];
@@ -433,7 +433,11 @@ void OnTimer()
     if ((LimitBars) && (limit > MaxBars)) limit = MaxBars;
     if (Bars < limit + RSIPeriod) limit = Bars;
 
-    if (HistoricalOK) CalculateBuffers(limit);
+    if (HistoricalOK)
+    {
+        bool calc_success = CalculateBuffers(limit); // Did some pairs failed due to bars' desync?
+        if (!calc_success) return; // Recalculate next time.
+    }
     if (!HistoricalOK)
     {
         if (DrawPanel) DrawMissingHistorical();
@@ -477,7 +481,8 @@ int OnCalculate (const int rates_total,
     if ((LimitBars) && (limit > MaxBars)) limit = MaxBars;
     if (rates_total < limit + RSIPeriod) limit = rates_total;
 
-    CalculateBuffers(limit);
+    bool calc_success = CalculateBuffers(limit); // Did some pairs failed due to bars' desync?
+    if (!calc_success) return prev_calculated; // Recalculate next time.
     if (!HistoricalOK)
     {
         DrawMissingHistorical();
@@ -551,28 +556,32 @@ bool CheckAllPairs()
     return true;
 }
 
-void CalculateBuffers(int limit)
+// Returns false if it failed to calculate the buffers. True - on success.
+bool CalculateBuffers(int limit)
 {
     if (limit > ArraySize(EUR)) limit = ArraySize(EUR);
     for(int i = 0; i < limit; i++)
     {
+        bool success = false;
         switch(CalculationMode)
         {
         case 2:
-            CalculateRSITot(i);
+            success = CalculateRSITot(i);
             break;
         case 3:
-            CalculateRSITotMA(i);
+            success = CalculateRSITotMA(i);
             break;
-        case 4:
-            CalculateROCTot(i);
+        case Mode_ROC:
+            success = CalculateROCTot(i);
             break;
-        case 5:
-            CalculateROCTotMA(i);
+        case Mode_ROCMA:
+            success = CalculateROCTotMA(i);
             break;
         }
+        if (!success) return false;
     }
     CopyBaseQuote();
+    return true;
 }
 
 void CreateLabels()
@@ -799,55 +808,184 @@ void DetectCurrencies()
     }
 }
 
-void CalculateROCTot(int i)
+bool CalculateROCTot(int i)
 {
-    if (UseEUR) EUR[i] = ROCTot("EUR", i);
-    if (UseGBP) GBP[i] = ROCTot("GBP", i);
-    if (UseUSD) USD[i] = ROCTot("USD", i);
-    if (UseJPY) JPY[i] = ROCTot("JPY", i);
-    if (UseAUD) AUD[i] = ROCTot("AUD", i);
-    if (UseNZD) NZD[i] = ROCTot("NZD", i);
-    if (UseCAD) CAD[i] = ROCTot("CAD", i);
-    if (UseCHF) CHF[i] = ROCTot("CHF", i);
+    if (UseEUR)
+    {
+        EUR[i] = ROCTot("EUR", i);
+        if (EUR[i] == EMPTY_VALUE) return false;
+    }
+    if (UseGBP)
+    {
+        GBP[i] = ROCTot("GBP", i);
+        if (GBP[i] == EMPTY_VALUE) return false;
+    }
+    if (UseUSD)
+    {
+        USD[i] = ROCTot("USD", i);
+        if (USD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseJPY)
+    {
+        JPY[i] = ROCTot("JPY", i);
+        if (JPY[i] == EMPTY_VALUE) return false;
+    }
+    if (UseAUD)
+    {
+        AUD[i] = ROCTot("AUD", i);
+        if (AUD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseNZD)
+    {
+        NZD[i] = ROCTot("NZD", i);
+        if (NZD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCAD)
+    {
+        CAD[i] = ROCTot("CAD", i);
+        if (CAD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCHF)
+    {
+        CHF[i] = ROCTot("CHF", i);
+        if (CHF[i] == EMPTY_VALUE) return false;
+    }
+    return true;
 }
 
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CalculateROCTotMA(int i)
+bool CalculateROCTotMA(int i)
 {
-    if (UseEUR) EUR[i] = ROCTotMA("EUR", i);
-    if (UseGBP) GBP[i] = ROCTotMA("GBP", i);
-    if (UseUSD) USD[i] = ROCTotMA("USD", i);
-    if (UseJPY) JPY[i] = ROCTotMA("JPY", i);
-    if (UseAUD) AUD[i] = ROCTotMA("AUD", i);
-    if (UseNZD) NZD[i] = ROCTotMA("NZD", i);
-    if (UseCAD) CAD[i] = ROCTotMA("CAD", i);
-    if (UseCHF) CHF[i] = ROCTotMA("CHF", i);
+    if (UseEUR)
+    {
+        EUR[i] = ROCTotMA("EUR", i);
+        if (EUR[i] == EMPTY_VALUE) return false;
+    }
+    if (UseGBP)
+    {
+        GBP[i] = ROCTotMA("GBP", i);
+        if (GBP[i] == EMPTY_VALUE) return false;
+    }
+    if (UseUSD)
+    {
+        USD[i] = ROCTotMA("USD", i);
+        if (USD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseJPY)
+    {
+        JPY[i] = ROCTotMA("JPY", i);
+        if (JPY[i] == EMPTY_VALUE) return false;
+    }
+    if (UseAUD)
+    {
+        AUD[i] = ROCTotMA("AUD", i);
+        if (AUD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseNZD)
+    {
+        NZD[i] = ROCTotMA("NZD", i);
+        if (NZD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCAD)
+    {
+        CAD[i] = ROCTotMA("CAD", i);
+        if (CAD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCHF)
+    {
+        CHF[i] = ROCTotMA("CHF", i);
+        if (CHF[i] == EMPTY_VALUE) return false;
+    }
+    return true;
 }
 
-void CalculateRSITot(int i)
+bool CalculateRSITot(int i)
 {
-    if (UseEUR) EUR[i] = RSITot("EUR", i);
-    if (UseGBP) GBP[i] = RSITot("GBP", i);
-    if (UseUSD) USD[i] = RSITot("USD", i);
-    if (UseJPY) JPY[i] = RSITot("JPY", i);
-    if (UseAUD) AUD[i] = RSITot("AUD", i);
-    if (UseNZD) NZD[i] = RSITot("NZD", i);
-    if (UseCAD) CAD[i] = RSITot("CAD", i);
-    if (UseCHF) CHF[i] = RSITot("CHF", i);
+    if (UseEUR)
+    {
+        EUR[i] = RSITot("EUR", i);
+        if (EUR[i] == EMPTY_VALUE) return false;
+    }
+    if (UseGBP)
+    {
+        GBP[i] = RSITot("GBP", i);
+        if (GBP[i] == EMPTY_VALUE) return false;
+    }
+    if (UseUSD)
+    {
+        USD[i] = RSITot("USD", i);
+        if (USD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseJPY)
+    {
+        JPY[i] = RSITot("JPY", i);
+        if (JPY[i] == EMPTY_VALUE) return false;
+    }
+    if (UseAUD)
+    {
+        AUD[i] = RSITot("AUD", i);
+        if (AUD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseNZD)
+    {
+        NZD[i] = RSITot("NZD", i);
+        if (NZD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCAD)
+    {
+        CAD[i] = RSITot("CAD", i);
+        if (CAD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCHF)
+    {
+        CHF[i] = RSITot("CHF", i);
+        if (CHF[i] == EMPTY_VALUE) return false;
+    }
+    return true;
 }
 
-void CalculateRSITotMA(int i)
+bool CalculateRSITotMA(int i)
 {
-    if (UseEUR) EUR[i] = RSITotMA("EUR", i);
-    if (UseGBP) GBP[i] = RSITotMA("GBP", i);
-    if (UseUSD) USD[i] = RSITotMA("USD", i);
-    if (UseJPY) JPY[i] = RSITotMA("JPY", i);
-    if (UseAUD) AUD[i] = RSITotMA("AUD", i);
-    if (UseNZD) NZD[i] = RSITotMA("NZD", i);
-    if (UseCAD) CAD[i] = RSITotMA("CAD", i);
-    if (UseCHF) CHF[i] = RSITotMA("CHF", i);
+    if (UseEUR)
+    {
+        EUR[i] = RSITotMA("EUR", i);
+        if (EUR[i] == EMPTY_VALUE) return false;
+    }
+    if (UseGBP)
+    {
+        GBP[i] = RSITotMA("GBP", i);
+        if (GBP[i] == EMPTY_VALUE) return false;
+    }    
+    if (UseUSD)
+    {
+        USD[i] = RSITotMA("USD", i);
+        if (USD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseJPY)
+    {
+        JPY[i] = RSITotMA("JPY", i);
+        if (JPY[i] == EMPTY_VALUE) return false;
+    }
+    if (UseAUD)
+    {
+        AUD[i] = RSITotMA("AUD", i);
+        if (AUD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseNZD)
+    {
+        NZD[i] = RSITotMA("NZD", i);
+        if (NZD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCAD)
+    {
+        CAD[i] = RSITotMA("CAD", i);
+        if (CAD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCHF)
+    {
+        CHF[i] = RSITotMA("CHF", i);
+        if (CHF[i] == EMPTY_VALUE) return false;
+    }
+    return true;
 }
 
 double ROCTot(string Curr, int j)
@@ -856,6 +994,7 @@ double ROCTot(string Curr, int j)
     for (int i = 0; i < ArraySize(AllPairs); i++)
     {
         if (StringFind(AllPairs[i], Curr, 0) < 0) continue;
+        if (iTime(AllPairs[i], LinesTF, 0) != iTime(_Symbol, LinesTF, 0)) return EMPTY_VALUE; // A new bar on the currency pair didn't update yet. Assuming that current symbol is always up-to-date.
         int k = j;
         if (LinesTF != Period()) k = iBarShift(AllPairs[i], LinesTF, Time[j], false);
         double EndValue = iClose(AllPairs[i], LinesTF, k);
@@ -886,6 +1025,7 @@ double ROCTotMA(string Curr, int j)
     for (int i = 0; i < ArraySize(AllPairs); i++)
     {
         if (StringFind(AllPairs[i], Curr, 0) < 0) continue;
+        if (iTime(AllPairs[i], LinesTF, 0) != iTime(_Symbol, LinesTF, 0)) return EMPTY_VALUE; // A new bar on the currency pair didn't update yet. Assuming that current symbol is always up-to-date.
         double SValue = 0;
         for (int h = 0; h < SmoothingPeriod; h++)
         {
@@ -920,6 +1060,7 @@ double RSITot(string Curr, int j)
     for (int i = 0; i < ArraySize(AllPairs); i++)
     {
         if (StringFind(AllPairs[i], Curr, 0) < 0) continue;
+        if (iTime(AllPairs[i], LinesTF, 0) != iTime(_Symbol, LinesTF, 0)) return EMPTY_VALUE; // A new bar on the currency pair didn't update yet. Assuming that current symbol is always up-to-date.
         int k = j;
         if (LinesTF != Period()) k = iBarShift(AllPairs[i], LinesTF, Time[j], false);
         double SValue = iRSI(AllPairs[i], LinesTF, RSIPeriod, PRICE_CLOSE, k);
@@ -947,6 +1088,7 @@ double RSITotMA(string Curr, int j)
     for (int i = 0; i < ArraySize(AllPairs); i++)
     {
         if (StringFind(AllPairs[i], Curr, 0) < 0) continue;
+        if (iTime(AllPairs[i], LinesTF, 0) != iTime(_Symbol, LinesTF, 0)) return EMPTY_VALUE; // A new bar on the currency pair didn't update yet. Assuming that current symbol is always up-to-date.
         double SValue = 0;
         for (int h = 0; h < SmoothingPeriod; h++)
         {
@@ -1017,6 +1159,7 @@ int DrawArrow(int i)
     bool Sell = false;
     bool Neutral = false;
     if ((ArraySize(Base) == 0) || (ArraySize(Quote) == 0)) return LastArrow;
+    if (i >= ArraySize(Base) - 1) return LastArrow;
     ValueBaseCurr = Base[i];
     ValueBasePrev = Base[i + 1];
     ValueQuoteCurr = Quote[i];
