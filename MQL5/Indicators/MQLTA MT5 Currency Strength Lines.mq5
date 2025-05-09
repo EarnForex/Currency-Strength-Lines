@@ -1,7 +1,7 @@
 #property link          "https://www.earnforex.com/metatrader-indicators/currency-strength-lines/"
-#property version       "1.19"
+#property version       "1.20"
 #property strict
-#property copyright     "EarnForex.com - 2019-2023"
+#property copyright     "EarnForex.com - 2019-2025"
 #property description   "This indicator analyses the strength of a currency and its trend"
 #property description   "comparing different values across multiple pairs."
 #property description   " "
@@ -42,13 +42,18 @@
 #property indicator_type7  DRAW_LINE
 #property indicator_type8  DRAW_LINE
 #property indicator_level1 DRAW_LINE
+#property indicator_level1 0
+#property indicator_levelstyle STYLE_DOT
+#property indicator_levelcolor clrGray
 
 enum Enum_CalculationMode
 {
-    Mode_ASITot = 2,                    //ASI TOT
-    Mode_ASITotMA = 3,                  //ASI TOT MA
-    Mode_ROC = 4,                       //ROC TOT
-    Mode_ROCMA = 5,                     //ROC TOT MA
+    Mode_ASITot,                    //ASI TOT
+    Mode_ASITotMA,                  //ASI TOT MA
+    Mode_ROC,                       //ROC TOT
+    Mode_ROCMA,                     //ROC TOT MA
+    Mode_Stoch_Main,                //Stochastic Main
+    Mode_Stoch_Sig,                 //Stochastic Signal
 };
 
 enum ENUM_ZONETYPE
@@ -72,17 +77,19 @@ enum enum_candle_to_check
     Previous
 };
 
-input string comment_0 = "==========";    // CSI Indicator
 input string IndicatorName = "MQLTA-CSL"; // Indicator's Name
 
-input string comment_2 = "=========="; // Calculation Options
+input group "Calculation"
 input Enum_CalculationMode CalculationMode = Mode_ASITot; // Calculation Mode
 input int ROCPeriod = 5;               // ROC Period (if using ROC Mode)
 input int RSIPeriod = 14;              // ASI Period
 input int SmoothingPeriod = 5;         // Smoothing (if using TOT MA)
+input int Stochastic_K_Period = 5;     // Stochastic %K Period
+input int Stochastic_D_Period = 3;     // Stochastic %D Period
+input int Stochastic_Slowing = 3;      // Stochastic Slowing
 input ENUM_TIMEFRAMES LinesTimeFrame = PERIOD_CURRENT; // Strength Lines Time Frame
 
-input string comment_3 = "=========="; // Signals Options
+input group "Arrows"
 input bool DrawAllCurrencies = false;  // Draw All Currency Strength
 input bool ShowSignals = true;         // Show Arrow Signals
 input bool AboveBelow = true;          // Draw when a currency is above the other
@@ -92,23 +99,23 @@ input color BuyColor = clrGreen;       // Buy signal color
 input color SellColor = clrRed;        // Sell signal color
 input color NeutralColor = clrDimGray; // Neutral signal color
 
-input string comment_5 = "====================";         //Notification Options
+input group "Notifications"
 input bool EnableNotify = false;       // Enable Notifications feature
 input bool SendAlert = true;           // Send Alert Notification
 input bool SendApp = false;            // Send Notification to Mobile
 input bool SendEmail = false;          // Send Notification via Email
 input enum_candle_to_check TriggerCandle = Previous;
 
-input string comment_9 = "=========="; // Indicator Visibility
+input group "Performance"
 bool LimitBars = true;                 // Limit the number of bars to calculate
 input int MaxBars = 1000;              // Number of bars to calculate
 input int MinimumRefreshInterval = 5;  // Minimum Refresh Interval (Seconds)
 
-input string comment_7 = "=========="; // Pairs Prefix and Suffix
+input group "Prefix and suffix"
 input string CurrencyPrefix = "";      // Pairs Prefix
 input string CurrencySuffix = "";      // Pairs Suffix
 
-string comment_1 = "=========="; // Currencies to Analyse
+input group "Currencies to analyze"
 bool UseEUR = true;              // EUR
 bool UseUSD = true;              // USD
 bool UseGBP = true;              // GBP
@@ -118,7 +125,7 @@ bool UseNZD = true;              // NZD
 bool UseCAD = true;              // CAD
 bool UseCHF = true;              // CHF
 
-input string comment_1b = "==========";   // Currencies Colors and Width
+input group "Colors and width"
 input ENUM_CORNER Corner = TopLeft;       // Corner to show the labels
 input int XOffset = 0;                    // Horizontal offset (pixels)
 input int YOffset = 0;                    // Vertical offset (pixels)
@@ -133,6 +140,7 @@ input color CADColor = clrDarkGreen;      // CAD
 input color CHFColor = clrMediumSeaGreen; // CHF
 input int NormalWidth = 1;                // Width for Currencies not on chart
 input int SelectedWidth = 3;              // Width for Currencies on chart
+input group "Miscellaneous"
 input bool ErrorLog = false;              // Enable Verbose Logging
 input bool DrawPanel = true;              // Draw Panel
 
@@ -217,6 +225,8 @@ const int IndicatorDigits = 4;
 const int PAIRS_COUNT = 28;
 int RSIHandle[28];
 double RSIValue[][28];
+int StochHandle[28];
+double StochValue[][28];
 
 string LastAlertDirection = ""; // Signal that was alerted on previous alert.
 datetime LastNotification = 0;
@@ -245,11 +255,6 @@ int OnInit()
     DetectCurrencies();
 
     IndicatorSetString(INDICATOR_SHORTNAME, IndicatorName);
-
-    IndicatorSetInteger(INDICATOR_LEVELS, 1);
-    IndicatorSetDouble(INDICATOR_LEVELVALUE, indicator_level1, 0);
-    IndicatorSetInteger(INDICATOR_LEVELSTYLE, 0, STYLE_DOT);
-    IndicatorSetInteger(INDICATOR_LEVELCOLOR, 0, clrGray);
 
     int Width = NormalWidth;
     int DrawStyle = DRAW_LINE;
@@ -336,8 +341,15 @@ int OnInit()
     ArrayInitialize(Base, EMPTY_VALUE);
     ArrayInitialize(Quote, EMPTY_VALUE);
 
-    if (!GetRSIHandle()) return INIT_FAILED;
-
+    if ((CalculationMode == Mode_ASITot) || (CalculationMode == Mode_ASITotMA))
+    {
+        if (!GetRSIHandle()) return INIT_FAILED;
+    }
+    else if ((CalculationMode == Mode_Stoch_Main) || (CalculationMode == Mode_Stoch_Sig))
+    {
+        if (!GetStochHandle()) return INIT_FAILED;
+    }
+    
     DPIScale = (double)TerminalInfoInteger(TERMINAL_SCREEN_DPI) / 96.0;
     LabelX = (int)MathRound(290 * DPIScale);
     LabelY = (int)MathRound(35 * DPIScale);
@@ -374,9 +386,19 @@ void OnTimer()
     }
     HistoricalOK = true;
 
-    int rsi_limit = limit;
-    if (rsi_limit < SmoothingPeriod) rsi_limit = limit + SmoothingPeriod;
-    if (!GetRSIValue(rsi_limit)) HistoricalOK = false;
+    if ((CalculationMode == Mode_ASITot) || (CalculationMode == Mode_ASITotMA))
+    {
+        int rsi_limit = limit;
+        if (rsi_limit < SmoothingPeriod) rsi_limit = limit + SmoothingPeriod;
+        if (!GetRSIValue(rsi_limit)) HistoricalOK = false;
+    }
+    else if ((CalculationMode == Mode_Stoch_Main) || (CalculationMode == Mode_Stoch_Sig))
+    {
+        int stoch_limit = limit;
+        if (stoch_limit < Stochastic_K_Period + Stochastic_K_Period + Stochastic_Slowing) stoch_limit = Stochastic_K_Period + Stochastic_K_Period + Stochastic_Slowing;
+        if (!GetStochValue(stoch_limit)) HistoricalOK = false;
+    }
+    
     if (HistoricalOK)
     {
         bool calc_success = CalculateBuffers(limit); // Did some pairs failed due to bars' desync?
@@ -433,10 +455,22 @@ int OnCalculate(const int rates_total,
     HistoricalOK = true;
 
     if ((LimitBars) && (limit > MaxBars)) limit = MaxBars;
-    if (rates_total < limit + RSIPeriod) limit = rates_total;
-    int rsi_limit = limit;
-    if (rsi_limit < SmoothingPeriod) rsi_limit = limit + SmoothingPeriod;
-    if (!GetRSIValue(rsi_limit)) HistoricalOK = false;
+    if ((CalculationMode == Mode_ASITot) || (CalculationMode == Mode_ASITotMA))
+    {
+        if (rates_total < limit + RSIPeriod) limit = rates_total;
+        int rsi_limit = limit;
+        if (rsi_limit < SmoothingPeriod) rsi_limit = limit + SmoothingPeriod;
+        if (!GetRSIValue(rsi_limit)) HistoricalOK = false;
+    }
+    else if ((CalculationMode == Mode_Stoch_Main) || (CalculationMode == Mode_Stoch_Sig))
+    {
+        if (rates_total < limit + Stochastic_K_Period + Stochastic_K_Period + Stochastic_Slowing) limit = rates_total;
+        int stoch_limit = limit;
+        if (stoch_limit < Stochastic_K_Period + Stochastic_K_Period + Stochastic_Slowing) stoch_limit = Stochastic_K_Period + Stochastic_K_Period + Stochastic_Slowing;
+        if (!GetStochValue(stoch_limit)) HistoricalOK = false;
+    }
+    if (rates_total < limit) limit = rates_total;
+    
     if (HistoricalOK)
     {
         bool calc_success = CalculateBuffers(limit); // Did some pairs failed due to bars' desync?
@@ -482,9 +516,11 @@ string CalculationModeDesc()
 {
     string Text = "";
     if (CalculationMode == Mode_ASITot) Text = "ASI TOT";
-    if (CalculationMode == Mode_ASITotMA) Text = "ASI TOT MA";
-    if (CalculationMode == Mode_ROC) Text = "ROC TOT";
-    if (CalculationMode == Mode_ROCMA) Text = "ROC TOT MA";
+    else if (CalculationMode == Mode_ASITotMA) Text = "ASI TOT MA";
+    else if (CalculationMode == Mode_ROC) Text = "ROC TOT";
+    else if (CalculationMode == Mode_ROCMA) Text = "ROC TOT MA";
+    else if (CalculationMode == Mode_Stoch_Main) Text = "STOCH MAIN";
+    else if (CalculationMode == Mode_Stoch_Sig) Text = "STOCH SIG";
     return Text;
 }
 
@@ -528,6 +564,21 @@ bool GetRSIHandle()
     return true;
 }
 
+bool GetStochHandle()
+{
+    for (int i = 0; i < ArraySize(AllPairs); i++)
+    {
+        StochHandle[i] = iStochastic(AllPairs[i], LinesTF, Stochastic_K_Period, Stochastic_D_Period, Stochastic_Slowing, MODE_EMA, STO_CLOSECLOSE);
+        if (ErrorLog) Print("Stochastic handle for ", AllPairs[i], " = ", StochHandle[i]);
+        if (StochHandle[i] == INVALID_HANDLE)
+        {
+            if(ErrorLog) Print("Handle initialization failed for ", AllPairs[i]);
+            return false;
+        }
+    }
+    return true;
+}
+
 bool GetRSIValue(int Max)
 {
     ArrayResize(RSIValue, PAIRS_COUNT * Max, 0);
@@ -538,15 +589,15 @@ bool GetRSIValue(int Max)
         ArrayInitialize(RSIValueTemp, NULL);
         ArraySetAsSeries(RSIValueTemp, true);
         int c = CopyBuffer(RSIHandle[i], 0, 0, Max, RSIValueTemp);
-        if (ErrorLog) Print("Copied for ", AllPairs[i], " ", c, " values");
+        if (ErrorLog) Print("RSI: Copied for ", AllPairs[i], " ", c, " values");
         if (c < 0)
         {
-            if (ErrorLog) Print("Error copying ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i);
+            if (ErrorLog) Print("RSI: Error copying ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i);
             return false;
         }
         if (c < Max)
         {
-            if (ErrorLog) Print("Not enough values for ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i, " found only ", c);
+            if (ErrorLog) Print("RSI: Not enough values for ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i, " found only ", c);
             HistoricalOK = false;
             MissingHistoricalPair = AllPairs[i];
             return false;
@@ -555,12 +606,54 @@ bool GetRSIValue(int Max)
         {
             if ((RSIValueTemp[j] == NULL) || (RSIValueTemp[j] == EMPTY_VALUE))
             {
-                if (ErrorLog) Print("Value not valid for for ", AllPairs[i], " value - ", RSIValueTemp[j], " - shift ", j, " - index: ", i);
+                if (ErrorLog) Print("RSI: Value not valid for for ", AllPairs[i], " value - ", RSIValueTemp[j], " - shift ", j, " - index: ", i);
                 HistoricalOK = false;
                 MissingHistoricalPair = AllPairs[i];
                 return false;
             }
             RSIValue[j][i] = RSIValueTemp[j];
+        }
+    }
+    return true;
+}
+
+bool GetStochValue(int Max)
+{
+    ArrayResize(StochValue, PAIRS_COUNT * Max, 0);
+    for (int i = 0; i < ArraySize(AllPairs); i++)
+    {
+        double StochValueTemp[];
+        ArrayResize(StochValueTemp, Max, 0);
+        ArrayInitialize(StochValueTemp, NULL);
+        ArraySetAsSeries(StochValueTemp, true);
+        int buf_number = 0;
+        if (CalculationMode == Mode_Stoch_Main) buf_number = 0;
+        else if (CalculationMode == Mode_Stoch_Sig) buf_number = 1;
+        int c = CopyBuffer(StochHandle[i], buf_number, 0, Max, StochValueTemp);
+
+        if (ErrorLog) Print("Stochastic: Copied for ", AllPairs[i], " ", c, " values");
+        if (c < 0)
+        {
+            if (ErrorLog) Print("Stochastic: Error copying ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i);
+            return false;
+        }
+        if (c < Max)
+        {
+            if (ErrorLog) Print("Stochastic: Not enough values for ", AllPairs[i], " data - ", GetLastErrorText(GetLastError()), " - ", GetLastError(), " - index: ", i, " found only ", c);
+            HistoricalOK = false;
+            MissingHistoricalPair = AllPairs[i];
+            return false;
+        }
+        for (int j = 0; j < ArraySize(StochValueTemp); j++)
+        {
+            if ((StochValueTemp[j] < 0) || (StochValueTemp[j] == EMPTY_VALUE))
+            {
+                if (ErrorLog) Print("Stochastic: Value not valid for for ", AllPairs[i], " value - ", StochValueTemp[j], " - shift ", j, " - index: ", i);
+                HistoricalOK = false;
+                MissingHistoricalPair = AllPairs[i];
+                return false;
+            }
+            StochValue[j][i] = StochValueTemp[j];
         }
     }
     return true;
@@ -586,6 +679,10 @@ bool CalculateBuffers(int limit)
             break;
         case Mode_ROCMA:
             success = CalculateROCTotMA(i);
+            break;
+        case Mode_Stoch_Main:
+        case Mode_Stoch_Sig:
+            success = CalculateStoch(i); // Same for both because the only difference was when CopyBuffer() was called.
             break;
         }
         if (!success) return false;
@@ -763,6 +860,7 @@ void GoToMissing(string Pair)
 void CleanChart()
 {
     ObjectsDeleteAll(ChartID(), IndicatorName);
+    ChartRedraw();
 }
 
 void DetectCurrencies()
@@ -977,6 +1075,51 @@ bool CalculateRSITotMA(int i)
     return true;
 }
 
+bool CalculateStoch(int i)
+{
+    if (UseEUR)
+    {
+        EUR[i] = GetStochStrength("EUR", i);
+        if (EUR[i] == EMPTY_VALUE) return false;
+    }
+    if (UseGBP)
+    {
+        GBP[i] = GetStochStrength("GBP", i);
+        if (GBP[i] == EMPTY_VALUE) return false;
+    }
+    if (UseUSD)
+    {
+        USD[i] = GetStochStrength("USD", i);
+        if (USD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseJPY)
+    {
+        JPY[i] = GetStochStrength("JPY", i);
+        if (JPY[i] == EMPTY_VALUE) return false;
+    }
+    if (UseAUD)
+    {
+        AUD[i] = GetStochStrength("AUD", i);
+        if (AUD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseNZD)
+    {
+        NZD[i] = GetStochStrength("NZD", i);
+        if (NZD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCAD)
+    {
+        CAD[i] = GetStochStrength("CAD", i);
+        if (CAD[i] == EMPTY_VALUE) return false;
+    }
+    if (UseCHF)
+    {
+        CHF[i] = GetStochStrength("CHF", i);
+        if (CHF[i] == EMPTY_VALUE) return false;
+    }
+    return true;
+}
+
 double GetROCStrength(string Curr, int j)
 {
     double Tot = 0;
@@ -1112,6 +1255,37 @@ double GetRSIMAStrength(string Curr, int j)
         }
     }
     if (ErrorLog) Print("Calculated RSI strength for ", Curr, " and shift ", j, " with a value of ", Tot);
+    return NormalizeDouble(Tot, IndicatorDigits);
+}
+
+double GetStochStrength(string Curr, int j)
+{
+    double Tot = 0;
+    for (int i = 0; i < ArraySize(AllPairs); i++)
+    {
+        if (StringFind(AllPairs[i], Curr, 0) < 0) continue;
+        int k = j;
+        if (iTime(AllPairs[i], LinesTF, 0) != iTime(_Symbol, LinesTF, 0)) return EMPTY_VALUE; // A new bar on the currency pair didn't update yet. Assuming that current symbol is always up-to-date.
+        if (LinesTF != Period()) k = iBarShift(AllPairs[i], LinesTF, iTime(AllPairs[i], Period(), j), false);
+        if ((k == -1) || (k > Bars(AllPairs[i], LinesTF)) || (iTime(AllPairs[i], Period(), j) == 0))
+        {
+            if (ErrorLog) Print("Value not valid for ", AllPairs[i], " value - ", k);
+            HistoricalOK = false;
+            MissingHistoricalPair = AllPairs[i];
+            return 0;
+        }
+        double SValue = StochValue[k][i];
+        if (ErrorLog) Print("Using Stochastic value of ", SValue, " for ", AllPairs[i], " and shift ", j);
+        if (StringFind(AllPairs[i], Curr, 0) < 3)
+        {
+            Tot += (SValue - 50) / (CurrenciesUsed - 1);
+        }
+        else
+        {
+            Tot += ((100 - SValue) - 50) / (CurrenciesUsed - 1);
+        }
+    }
+    if (ErrorLog) Print("Calculated Stochastic strength for ", Curr, " and shift ", j, " with a value of ", Tot);
     return NormalizeDouble(Tot, IndicatorDigits);
 }
 
