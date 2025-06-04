@@ -6,6 +6,6 @@ It supports display of upper timeframe calculations (basic MTF capability) and a
 
 ![Currency Strength Lines example chart for a short-term EUR/USD chart](https://github.com/EarnForex/Currency-Strength-Lines/blob/main/README_Images/currency-strength-lines-example-eurusd-short-term.png)
 
-More information about this custom MetaTrader indicator is available here: https://www.earnforex.com/metatrader-indicators/currency-strength-lines/
+More information about this custom MetaTrader indicator is available here: https://www.earnforex.com/indicators/currency-strength-lines/
 
 Any contributions to the code are welcome!
